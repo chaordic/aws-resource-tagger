@@ -158,10 +158,10 @@ class Resources(object):
         for vol in self.volumes.keys():
             volume = self.volumes[vol]
             if volume["attached"] != "yes":
-                messages.append(("ignoring volume {}=unattached to instance".format(vol))
+                messages.append("ignoring volume {}=unattached to instance".format(vol))
                 continue
             if 'error' in volume["tags"]:
-                messages.append(("ignoring volume {}={}".format(vol, str(volume["tags"])))
+                messages.append("ignoring volume {}={}".format(vol, str(volume["tags"]) ))
                 continue
             msg = ("{}={}".format(vol, str(volume["tags"])))
             logging.info(msg)
