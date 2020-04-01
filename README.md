@@ -67,6 +67,12 @@ create-scheduler-target
 time make run
 ```
 
+* DeBUG
+
+```bash
+LOG_LEVEL=DEBUG python3 ./main.py
+```
+
 * To get the ARN of Function
 
 ```bash

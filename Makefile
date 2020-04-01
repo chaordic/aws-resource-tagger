@@ -159,8 +159,8 @@ create-scheduler-target:
 ##############################################
 # Deploy && Update
 
-.PHONY : update-function
-update-function: pack
+.PHONY : deploy-function
+deploy-function: pack
 	$(AWS) lambda update-function-code \
 		--function-name $(FN_NAME) \
 		--zip-file fileb://$(FN_ZIP_FILE) \
@@ -168,4 +168,4 @@ update-function: pack
 
 
 .PHONY: deploy
-deploy: pack update-function
+deploy: pack deploy-function

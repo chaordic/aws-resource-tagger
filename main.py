@@ -94,16 +94,22 @@ class Resources(object):
             if len(v["Attachments"]) > 0:
                 for a in v["Attachments"]:
                     try:
-                        new_tags = self.tag_filter(self.instances[a['InstanceId']]["tags"])
-                        self.volumes[vol]["instance_tags"] = new_tags
+                        cur_tags = self.tag_filter(self.instances[a['InstanceId']]["tags"])
+                        # self.volumes[vol]["instance_tags"] = new_tags
                     except KeyError:
-                        self.volumes[vol]["instance_tags"] = {
+                        cur_tags = {
                             "error": "Instance tag's is NotFound."
                         }
                     self.volumes[vol]["instance_attached"] = a['InstanceId']
                     self.volumes[vol]["attached"] = "yes"
-                    # new_tags = copy.deepcopy(cur_tags)
-                    # volumes_toTag[vol]["tags"] = 
+                    new_tags = copy.deepcopy(cur_tags)
+                    try:
+                        device = self.instances[a['InstanceId']]["volumes_ebs"][vol]
+                    except KeyError:
+                        device = ''
+                    if 'Name' in new_tags:
+                        new_tags["Name"] += " " + device
+                    self.volumes[vol]["tags"] = new_tags
             else:
                 self.volumes[vol]["attached"] = "no"
 
@@ -144,6 +150,15 @@ class Resources(object):
         return tags_filtered
 
     def apply_tags_volumes(self):
+        for vol in self.volumes.keys():
+            volume = self.volumes[vol]
+            if volume["attached"] != "yes":
+                continue
+            logging.info("Applying tags to vol: {}".format(vol))
+            self.aws.clients["ec2"].create_tags(
+                    Resources=[vol],
+                    Tags=tag_dict_to_list(volume["tags"]))
+            break
         return
 
     def apply_tags_snapshots(self):
@@ -187,6 +202,7 @@ def main():
     resources = Resources()
     resources.load_info_instances()
     resources.load_info_volumes()
+    resources.apply_tags_volumes()
     resources.show_report()
     resources.add_metrics()
     resources.aws.push_metrics()
