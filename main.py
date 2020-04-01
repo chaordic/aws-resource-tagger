@@ -155,13 +155,22 @@ class Resources(object):
 
     def apply_tags_volumes(self):
         messages = []
+        if len(self.volumes) <= 0:
+            return
         for vol in self.volumes.keys():
             volume = self.volumes[vol]
-            if volume["attached"] != "yes":
-                messages.append("ignoring volume {}=unattached to instance".format(vol))
-                continue
-            if 'error' in volume["tags"]:
-                messages.append("ignoring volume {}={}".format(vol, str(volume["tags"]) ))
+
+            try:
+                if volume["attached"] != "yes":
+                    messages.append("ignoring volume {}=unattached to instance".format(vol))
+                    continue
+            except KeyError:
+                pass
+            try:
+                if 'error' in volume["tags"]:
+                    messages.append("ignoring volume {}={}".format(vol, str(volume["tags"]) ))
+                    continue
+            except KeyError:
                 continue
             msg = ("{}={}".format(vol, str(volume["tags"])))
             logging.info(msg)
