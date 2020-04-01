@@ -126,8 +126,12 @@ class Resources(object):
             print(">> Untagged volumes: ")
             pprint(self.volumes)
         
-        logging.info("Total untagged volumes: {}".format(len(self.volumes)))
-        logging.info("Total snapshoots to tag: {}".format(len(self.snapshots)))
+        msg = ("Total untagged volumes: {}".format(len(self.volumes)))
+        #logger.info(msg)
+        print(msg)
+        msg = ("Total snapshoots to tag: {}".format(len(self.snapshots)))
+        #logger.info(msg)
+        print(msg)
 
     def add_metrics(self):
         self.aws.add_metrics(
@@ -150,15 +154,22 @@ class Resources(object):
         return tags_filtered
 
     def apply_tags_volumes(self):
+        messages = []
         for vol in self.volumes.keys():
             volume = self.volumes[vol]
             if volume["attached"] != "yes":
+                messages.append(("ignoring volume {}=unattached to instance".format(vol))
                 continue
-            logging.info("Applying tags to vol: {}".format(vol))
+            if 'error' in volume["tags"]:
+                messages.append(("ignoring volume {}={}".format(vol, str(volume["tags"])))
+                continue
+            msg = ("{}={}".format(vol, str(volume["tags"])))
+            logging.info(msg)
+            messages.append(msg)
             self.aws.clients["ec2"].create_tags(
                     Resources=[vol],
                     Tags=tag_dict_to_list(volume["tags"]))
-            break
+        print("Tags applied to volumes: {}".format(json.dumps(messages)))
         return
 
     def apply_tags_snapshots(self):

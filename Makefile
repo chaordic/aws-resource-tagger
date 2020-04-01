@@ -92,6 +92,9 @@ update-iam-role:
 	$(AWS) iam attach-role-policy \
 		--role-name $(FN_ROLE) \
 		--policy-arn "arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess"
+	$(AWS) iam attach-role-policy \
+		--role-name $(FN_ROLE) \
+		--policy-arn "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 	$(AWS) iam put-role-policy \
 		--role-name $(FN_ROLE) \
 		--policy-name "config-ro" \
@@ -100,6 +103,10 @@ update-iam-role:
 		--role-name $(FN_ROLE) \
 		--policy-name "cloudwatch-put-metrics" \
 		--policy-document fileb://files/policy-cw.json
+	$(AWS) iam put-role-policy \
+		--role-name $(FN_ROLE) \
+		--policy-name "ec2-create-tags" \
+		--policy-document fileb://files/policy-ec2-tags.json
 
 
 .PHONY : create-iam-role
