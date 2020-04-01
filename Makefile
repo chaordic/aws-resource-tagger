@@ -23,7 +23,7 @@ FN_ENV_VARS := {TAG_FILTER_KEYS=chaordic:role}
 FN_CUSTOM_ARGS ?= 
 FN_TAGS ?= "{\"Name\":\"aws-resource-tags\""
 
-FN_SCHEDULE_MIN ?= 30
+FN_SCHEDULE_MIN ?= 10
 
 
 FN_ZIP_FILE := aws-resource-tagger.zip
