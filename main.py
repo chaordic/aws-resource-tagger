@@ -167,11 +167,16 @@ class Resources(object):
             except KeyError:
                 pass
             try:
+                if len(volume["tags"]) <= 0:
+                    messages.append("ignoring volume {}=empty tags".format(vol))
+                    continue
                 if 'error' in volume["tags"]:
                     messages.append("ignoring volume {}={}".format(vol, str(volume["tags"]) ))
                     continue
-            except KeyError:
+            except KeyError as e:
+                messages.append("ignoring volume {}=KeyError {}".format(vol, e))
                 continue
+
             msg = ("{}={}".format(vol, str(volume["tags"])))
             logging.info(msg)
             messages.append(msg)
