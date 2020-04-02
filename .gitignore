@@ -130,3 +130,5 @@ dmypy.json
 
 # Artifacts
 aws-resource-tagger.zip
+requirements-dev.txt
+venv_dev/
