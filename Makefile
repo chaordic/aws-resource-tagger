@@ -15,7 +15,7 @@ FN_ROLE := lambda-aws-resource-tagger
 FN_NAME := aws-resource-tagger
 FN_DESC := "Lambda Function to tag AWS Resources"
 FN_REGION := us-east-1
-FN_HANDLER := main.handler
+FN_HANDLER := main.handler_event
 FN_RUNTIME := python3.7
 FN_TIMEOUT := 30
 FN_MEM := 128
@@ -53,7 +53,7 @@ clean:
 pack:
 	( \
 		rm -rf $(FN_PKG_FILE); \
-		zip -g $(FN_ZIP_FILE) main.py aws.py; \
+		zip -g $(FN_ZIP_FILE) main.py aws.py resources.py utils.py; \
 	)
 
 ##############################################

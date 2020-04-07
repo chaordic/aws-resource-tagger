@@ -1,5 +1,6 @@
 import copy
 import json
+import os
 from pprint import pprint
 
 from aws import AWS
@@ -12,10 +13,14 @@ class Resources(object):
         self.instances = {}
         self.volumes = {}
         self.snapshots = {}
-        self.filtered_tag_keys = {}
+        self.filtered_tag_keys = []
+        self.require_tags_instance = []
         self.metric_prefix = 'resource_tagger_'
         self.metrics = {}
         self.aws = AWS()
+
+        self.tag_default_copy_key = ''
+        self.tag_default_copy_split = ['-', 2]
 
         self.setup()
     
@@ -25,7 +30,7 @@ class Resources(object):
         self.snapshots.clear()
 
         # Filters
-        fk = os.getenv("TAG_FILTER_KEYS" or [])
+        fk = os.getenv("TAG_FILTER_KEYS_INSTANCE" or [])
         if isinstance(fk, list):
             self.filtered_tag_keys = fk
         elif isinstance(fk, str):
@@ -33,6 +38,25 @@ class Resources(object):
         else:
             self.filtered_tag_keys = []
         
+        # Require tags for Instance
+        rt = os.getenv("TAG_REQUIRED_KEYS_INSTANCE" or [])
+        if isinstance(rt, list):
+            self.require_tags_instance = rt
+        elif isinstance(rt, str):
+            self.require_tags_instance =rt.split(',')
+        else:
+            self.require_tags_instance = []
+
+        # Copy tag value when it's defined
+        self.tag_default_copy_key = os.getenv("TAG_DEFAULT_COPY_KEY" or '')
+        ts = os.getenv("TAG_DEFAULT_COPY_SPLIT" or '')
+        if isinstance(ts, list):
+            self.tag_default_copy_split = ts
+        elif isinstance(ts, str):
+            self.tag_default_copy_split =ts.split(',')
+        else:
+            self.tag_default_copy_split = []
+
         # Metrics
         self.metrics = {
             "total_instances": 0,
@@ -61,9 +85,16 @@ class Resources(object):
                 except KeyError:
                     i["volumes"][b["deviceName"]] = b
 
+    def init_info_instances(self):
+        """Init will load instances to dict only if the instances is empty """
+        if len(self.instances) <= 0:
+            self.load_info_instances()
+        return
 
     def load_info_volumes(self):
         """Load all valumes that has not tags """
+
+        self.init_info_instances()
 
         volumes = self.aws.get_volumes()
         for vol in volumes:
@@ -148,6 +179,9 @@ class Resources(object):
         return tags_filtered
 
     def apply_tags_volumes(self):
+
+        self.load_info_volumes()
+
         messages = []
         if len(self.volumes) <= 0:
             return
@@ -193,6 +227,126 @@ class Resources(object):
         """
         return
 
+    def apply_tags_instance(self, instance_id, tags):
+        self.aws.clients["ec2"].create_tags(
+            Resources=[instance_id],
+            Tags=tags)
+
+
     def apply_tags_images(self):
         "TODO: what tags to use? Globals?"
         return
+
+    def apply_tags_from_event(self, event):
+        if 'instance-id' in event["detail"]:
+            return self.process_event_instance(event)
+
+        elif 'event' in event["detail"]:
+            if event["detail"]["event"] == "createVolume":
+                return self.process_event(event)
+
+        return {
+                "error": "event not found",
+                "event": event
+            }
+
+    def process_event_instance(self, event):
+
+        instance_id = event["detail"]["instance-id"]
+        instance = self.aws.get_instance_tags_api(instance_id)
+
+        if not instance:
+            print("ERR - No Tags or resource found for ID: {}".format(instance_id))
+            return
+
+        instance_tags = utils.tag_list_to_dict(instance["Tags"])
+
+        missing_keys = self.check_required_tags(instance_tags)
+        if len(missing_keys) <= 0:
+            print("That's OK, all required Tags was defined to resource_id: {}".format(instance_id))
+            return
+
+        try:
+            vpc_id = instance["VpcId"]
+        except:
+            vpc_id = ''
+
+        vpc = self.aws.get_vpc_tags(vpc_id)
+        if len(vpc) <= 0:
+            print("ERR - No VPC [{}] found, skipping tagger".format(vpc_id))
+            return
+
+        try:
+            vpc_tags = utils.tag_list_to_dict(vpc[0]["tags"])
+        except KeyError:
+            print("ERR - No VPC [{}] tags found, skipping tagger".format(vpc_id))
+            return
+        except:
+            raise
+
+        # discovery and fill tags to apply based on required (missing)
+        tags_to_apply = self.mount_required_tags_instance(
+            missing_keys=missing_keys,
+            vpc_tags=vpc_tags,
+            instance_tags=instance_tags
+        )
+
+        msg = {
+            "msg": "Applying tags to Instance",
+            "tags_to_apply": tags_to_apply,
+            "resource_id": instance_id,
+            "current_resource_tags": instance_tags,
+            "current_vpc_tags": vpc_tags,
+            "found_missing_keys": missing_keys
+        }
+        print(msg)
+        return self.apply_tags_instance(
+            instance_id=instance["InstanceId"],
+            tags=utils.tag_dict_to_list(tags_to_apply)
+        )
+
+    def check_required_tags(self, instance_tags):
+        missing_keys = []
+        missing_keys.clear()
+        for k in self.require_tags_instance:
+            try:
+                v = instance_tags[k]
+            except KeyError:
+                missing_keys.append(k)
+
+        return missing_keys
+
+    def mount_required_tags_instance(self, missing_keys, vpc_tags, instance_tags):
+        """
+        Check the missing keys and mount the tags to apply based on
+        filters, VPC and Instance tags.
+        """
+        tags_to_apply = {}
+
+        cnt = 0
+        for k in missing_keys:
+            try:
+                tags_to_apply[k] = vpc_tags[k]
+            except KeyError:
+                try:
+                    copy_tag = instance_tags[self.tag_default_copy_key]
+
+                    tag_value = ''
+                    cnt = 0
+                    sep = self.tag_default_copy_split[0]
+                    offset = int(self.tag_default_copy_split[1])
+                    # print(sep, offset)
+                    for v in copy_tag.split(sep):
+                        # print(k, v)
+                        tag_value += v
+                        cnt += 1
+                        if cnt >= offset:
+                            break
+                        tag_value += '-'
+
+                    tags_to_apply[k] = tag_value
+                except Exception as e:
+                    print("Unexpected error: ", e)
+                    raise
+
+        return tags_to_apply

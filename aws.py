@@ -10,12 +10,20 @@ defaults = {
             resourceId,
             configuration.imageId,
             configuration.blockDeviceMappings,
+            configuration.vpcId,
             tags,
             relationships
         WHERE
             resourceType = 'AWS::EC2::Instance'
             AND configuration.state.name = 'running'
             OR configuration.state.name = 'stopped'
+    """,
+    "query_vpcs": """
+        SELECT
+            resourceId,
+            tags
+        WHERE
+            resourceType = 'AWS::EC2::VPC'
     """
 }
 
@@ -39,27 +47,94 @@ class AWS(object):
 
         self.config_queries["instances"] = os.getenv("CONFIG_QUERY_INSTANCES", defaults["query_instances"])
 
-    def get_instances(self):
-        instances = []
-        instances.clear()
-
+    def run_Config_query(self, query):
+        response = []
+        response.clear()
         page = ''
         next_page = True
         while next_page:
             if page == '':
-                response = self.clients["config"].select_resource_config(Expression=self.config_queries["instances"])
+                resp = self.clients["config"].select_resource_config(Expression=query)
             else:
-                response = self.clients["config"].select_resource_config(Expression=self.config_queries["instances"], NextToken=page)
-            
-            if 'NextToken' in response:
-                page = response["NextToken"]
+                resp = self.clients["config"].select_resource_config(Expression=query, NextToken=page)
+
+            if 'NextToken' in resp:
+                page = resp["NextToken"]
             else:
                 next_page = False
 
-            for r in response['Results']:
-                instances.append(json.loads(r))
+            for r in resp['Results']:
+                response.append(json.loads(r))
 
-        return instances
+        return response
+
+    def get_instances(self):
+        return self.run_Config_query(
+            self.config_queries["instances"]
+        )
+
+    def get_instance_tags_Config(self, instance_id):
+        """
+        AWS Config has delay to ingest resources, then events
+        of new resources is not instantly available on the Config.
+        Therefore, to retrieve NEW resources, is not a good idea to
+        use AWS Config.
+         """
+        query = """
+            SELECT
+                resourceId,
+                tags,
+                relationships
+            WHERE
+                resourceType = 'AWS::EC2::Instance'
+                and resourceId = '{}'
+        """.format(instance_id)
+        return self.run_Config_query(query)
+
+    def get_instance_tags_api(self, instance_id):
+        """
+        Get instances directly from EC2:Instance API.
+        Understanding that instance_id is unique for whole
+        AWS resources, only the dictionary will be returned.
+        """
+        instance_resp = {}
+        instance_resp.clear()
+        try:
+            resp = self.clients["ec2"].describe_instances(
+                InstanceIds=[instance_id]
+            )
+            if 'Reservations' not in resp:
+                return instance_resp
+
+            if len(resp["Reservations"][0]['Instances']) <= 0:
+                return instance_resp
+
+            instance = resp["Reservations"][0]['Instances'][0]
+            if 'Tags' not in instance:
+                return instance_resp
+
+            dm = instance["BlockDeviceMappings"] or []
+            instance_resp = {
+                "InstanceId": instance["InstanceId"],
+                "Tags": instance["Tags"],
+                "BlockDeviceMappings": dm,
+                "VpcId": instance["VpcId"]
+            }
+        except Exception as e:
+            raise
+
+        return instance_resp
+
+    def get_vpc_tags(self, vpc_id):
+        query = """
+            SELECT
+                resourceId,
+                tags
+            WHERE
+                resourceType = 'AWS::EC2::VPC'
+                AND resourceId = '{}'
+        """.format(vpc_id)
+        return self.run_Config_query(query)
 
     def get_volumes(self):
         volumes = {}
