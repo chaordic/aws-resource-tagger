@@ -111,14 +111,22 @@ class AWS(object):
 
             instance = resp["Reservations"][0]['Instances'][0]
             if 'Tags' not in instance:
-                return instance_resp
+                tags = []
+            else:
+                tags = instance["Tags"]
 
             dm = instance["BlockDeviceMappings"] or []
+            try:
+                vpc_id = instance["VpcId"] or ''
+            except KeyError:
+                vpc_id = ''
+                pass
+
             instance_resp = {
                 "InstanceId": instance["InstanceId"],
-                "Tags": instance["Tags"],
+                "Tags": tags,
                 "BlockDeviceMappings": dm,
-                "VpcId": instance["VpcId"]
+                "VpcId": vpc_id
             }
         except Exception as e:
             raise

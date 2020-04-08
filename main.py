@@ -21,7 +21,7 @@ SAMPLE_EVENTS = {
                 "arn:aws:ec2:us-east-1:510796467886:instance/i-032f19176819dad87"
             ],
             "detail": {
-                "instance-id": "i-0e0c0c47ee909895b",
+                "instance-id": "i-0945d1f128bd001c1",
                 "state": "running"
             }
         }

@@ -253,6 +253,8 @@ class Resources(object):
     def process_event_instance(self, event):
 
         instance_id = event["detail"]["instance-id"]
+
+        print("Processing InstanceID: {}".format(instance_id))
         instance = self.aws.get_instance_tags_api(instance_id)
 
         if not instance:
@@ -329,6 +331,9 @@ class Resources(object):
                 tags_to_apply[k] = vpc_tags[k]
             except KeyError:
                 try:
+                    if self.tag_default_copy_key not in instance_tags:
+                        continue
+
                     copy_tag = instance_tags[self.tag_default_copy_key]
 
                     tag_value = ''
