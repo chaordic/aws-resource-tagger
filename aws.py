@@ -106,6 +106,9 @@ class AWS(object):
             if 'Reservations' not in resp:
                 return instance_resp
 
+            if len(resp["Reservations"]) <= 0:
+                return instance_resp
+
             if len(resp["Reservations"][0]['Instances']) <= 0:
                 return instance_resp
 
@@ -132,6 +135,43 @@ class AWS(object):
             raise
 
         return instance_resp
+
+    def get_volume_tags_api(self, resource_id):
+        """
+        Get Volumes directly from EC2:Volume API.
+        Understanding that VolumeId is unique for whole
+        AWS resources, only the dictionary will be returned.
+        """
+        resource_resp = {}
+        resource_resp.clear()
+        try:
+            resp = self.clients["ec2"].describe_volumes(
+                VolumeIds=[resource_id]
+            )
+            if 'Volumes' not in resp:
+                return resource_resp
+
+            if len(resp["Volumes"]) <= 0:
+                return resource_resp
+
+            resource = resp["Volumes"][0]
+            tags = []
+            if 'Tags' in resource:
+                tags = resource["Tags"]
+
+            at = []
+            if len(resource["Attachments"]) > 0:
+                at = resource["Attachments"][0]
+
+            resource_resp = {
+                "VolumeId": resource["VolumeId"],
+                "Tags": tags,
+                "Attachments": at
+            }
+        except Exception as e:
+            raise
+
+        return resource_resp
 
     def get_vpc_tags(self, vpc_id):
         query = """

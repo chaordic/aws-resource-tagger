@@ -227,11 +227,11 @@ class Resources(object):
         """
         return
 
-    def apply_tags_instance(self, instance_id, tags):
-        self.aws.clients["ec2"].create_tags(
-            Resources=[instance_id],
-            Tags=tags)
-
+    def apply_tags_ec2_resource(self, resource_id, tags):
+        return self.aws.clients["ec2"].create_tags(
+                    Resources=[resource_id],
+                    Tags=tags
+                )
 
     def apply_tags_images(self):
         "TODO: what tags to use? Globals?"
@@ -243,7 +243,7 @@ class Resources(object):
 
         elif 'event' in event["detail"]:
             if event["detail"]["event"] == "createVolume":
-                return self.process_event(event)
+                return self.process_event_volume(event)
 
         return {
                 "error": "event not found",
@@ -266,6 +266,14 @@ class Resources(object):
         missing_keys = self.check_required_tags(instance_tags)
         if len(missing_keys) <= 0:
             print("That's OK, all required Tags was defined to resource_id: {}".format(instance_id))
+            try:
+                self.check_tags_instance_dm(
+                    instance["BlockDeviceMappings"],
+                    instance_tags
+                )
+            except Exception as e:
+                print("Error - Tagging process was not complete in instance devices: {}".format(e))
+                pass
             return
 
         try:
@@ -302,9 +310,17 @@ class Resources(object):
             "found_missing_keys": missing_keys
         }
         print(msg)
-        return self.apply_tags_instance(
-            instance_id=instance["InstanceId"],
+        self.apply_tags_ec2_resource(
+            resource_id=instance["InstanceId"],
             tags=utils.tag_dict_to_list(tags_to_apply)
+        )
+
+        if 'BlockDeviceMappings' not in instance:
+            return
+
+        return self.check_tags_instance_dm(
+            instance["BlockDeviceMappings"],
+            {**instance_tags, **tags_to_apply}
         )
 
     def check_required_tags(self, instance_tags):
@@ -340,9 +356,7 @@ class Resources(object):
                     cnt = 0
                     sep = self.tag_default_copy_split[0]
                     offset = int(self.tag_default_copy_split[1])
-                    # print(sep, offset)
                     for v in copy_tag.split(sep):
-                        # print(k, v)
                         tag_value += v
                         cnt += 1
                         if cnt >= offset:
@@ -355,3 +369,90 @@ class Resources(object):
                     raise
 
         return tags_to_apply
+
+    def mount_required_tags_volume(self, missing_keys, instance_tags, volume_tags):
+        """
+        Check the missing keys and mount the tags to apply based on
+        Required tags (Env var), Instance Tags and Current Volume tags.
+        """
+        tags_to_apply = {}
+
+        cnt = 0
+        for k in missing_keys:
+            try:
+                tags_to_apply[k] = instance_tags[k]
+            except KeyError:
+                try:
+                    tags_to_apply[k] = 'missing-value'
+                except Exception as e:
+                    print("Unexpected error: ", e)
+                    raise
+
+        return tags_to_apply
+
+    def check_tags_instance_dm(self, devices, itags):
+        """Apply tags to Instance Devices """
+        for device in devices:
+            try:
+                ebs_map = device["Ebs"]
+            except KeyError:
+                print("Error - 'Ebs' info is not found on device map: {}".format(device))
+                continue
+            except Exception as e:
+                print("Error - Ebs_map on check_tags_instance_dm(): {}".format(e))
+                continue
+
+            try:
+                self.apply_tags_volume(
+                    ebs_map["VolumeId"],
+                    itags,
+                    device["DeviceName"]
+                )
+            except Exception as e:
+                print("Unkwnown error on check_tags_instance_dm(): {}".format(e))
+                pass
+
+    def apply_tags_volume(self, volume_id, itags, device_name):
+        if not itags:
+            print("ignoring volume {}=empty tags".format(volume_id))
+            return
+
+        volume = self.aws.get_volume_tags_api(volume_id)
+        if not volume:
+            print("ERR - No Tags or resource found for ID: {}".format(instance_id))
+            return
+
+        volume_tags = utils.tag_list_to_dict(volume["Tags"])
+
+        missing_keys = self.check_required_tags(volume_tags)
+        if len(missing_keys) <= 0:
+            print("That's OK, all required Tags was defined to resource_id: {}".format(volume_id))
+            return
+
+        # TODO double check: instance_id (owner of itags) is the same of Attachments.InstanceId
+
+        tags_to_apply = self.mount_required_tags_volume(
+            missing_keys=missing_keys,
+            instance_tags=itags,
+            volume_tags=volume_tags
+        )
+
+        if 'Name' in tags_to_apply:
+            tags_to_apply["Name"] += " " + device_name
+        else:
+            tags_to_apply["Name"] = "{} {}".format(itags["Name"], device_name)
+
+        msg = {
+            "msg": "Applying tags to Volume",
+            "tags_to_apply": tags_to_apply,
+            "resource_id": volume_id,
+            "current_resource_tags": volume_tags,
+            "current_instance_tags": itags,
+            "found_missing_keys": missing_keys
+        }
+        print(msg)
+
+        return self.apply_tags_ec2_resource(
+            resource_id=volume_id,
+            tags=utils.tag_dict_to_list(tags_to_apply)
+        )
