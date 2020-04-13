@@ -174,8 +174,10 @@ make update-function
 
 There is a few list of TODOs to improve the code. See a few:
 
+- Automate Cloud Watch Event Rules creation
 - support to tag another resources, like EIP, Snapshots, AMIs, etc
 - Lint and Unit tests
+- Create release management
 
 To see more, just filter to string mark `TODO:` on the code.
 
