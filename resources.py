@@ -7,7 +7,6 @@ from aws import AWS
 import utils
 
 
-
 class Resources(object):
     def __init__(self):
         self.instances = {}

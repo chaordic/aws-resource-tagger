@@ -1,6 +1,4 @@
 
-
-
 def tag_list_to_dict(tags_list):
     tags_dict = {}
     for tag in tags_list:

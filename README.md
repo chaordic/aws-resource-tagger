@@ -174,8 +174,8 @@ make update-function
 
 There is a few list of TODOs to improve the code. See a few:
 
-- support to tag EC2 instances that has no tag
 - support to tag another resources, like EIP, Snapshots, AMIs, etc
+- Lint and Unit tests
 
 To see more, just filter to string mark `TODO:` on the code.
 
